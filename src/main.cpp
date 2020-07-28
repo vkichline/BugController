@@ -1,5 +1,6 @@
 #include <esp_now.h>
 #include <WiFi.h>
+#include "Wire.h"
 #include "M5StickC.h"
 #include "BugCommunications.h"
 // M5StickCMacAddresses.h includes some defines, including a line like:
@@ -9,11 +10,18 @@
 #include "../../Secrets/M5StickCMacAddresses.h"
 
 
+#define JOY_ADDR 0x38
+
 struct_message  datagram;
 struct_response response;
 uint8_t         bugAddress[]        = M5STICKC_MAC_ADDRESS_BUGC_ROBOT;    // Specific to the BugC M5StickC
 bool            connected           = false;
 control_mode    mode                = MODE_FORWARD;
+int8_t          last                = 127;
+int8_t          JoyX                = 0;
+int8_t          JoyY                = 0;
+bool            JoyB                = false;
+bool            debug               = false;  // Extra serial spew if true
 
 
 bool command_stop() {
@@ -23,31 +31,7 @@ bool command_stop() {
   datagram.speed_3      = 0;
   datagram.color_left   = BLACK;
   datagram.color_right  = BLACK;
-  esp_err_t result = esp_now_send(bugAddress, (uint8_t *) &datagram, sizeof(struct_message));
-  return (ESP_OK == result);
-}
-
-
-bool command_forward() {
-  datagram.speed_0      = 100;
-  datagram.speed_1      = -100;
-  datagram.speed_2      = 100;
-  datagram.speed_3      = -100;
-  datagram.color_left   = 0x001000;
-  datagram.color_right  = 0x100000;
-  esp_err_t result = esp_now_send(bugAddress, (uint8_t *) &datagram, sizeof(struct_message));
-  return (ESP_OK == result);
-}
-
-
-bool command_backward() {
-  datagram.speed_0      = -100;
-  datagram.speed_1      = 100;
-  datagram.speed_2      = -100;
-  datagram.speed_3      = 100;
-  datagram.color_left   = 0x100000;
-  datagram.color_right  = 0x001000;
-  esp_err_t result = esp_now_send(bugAddress, (uint8_t *) &datagram, sizeof(struct_message));
+  esp_err_t result = esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
   return (ESP_OK == result);
 }
 
@@ -59,6 +43,20 @@ void print_mac_address(uint16_t color) {
   String mac = WiFi.macAddress();
   mac.replace(":", " ");
   M5.Lcd.drawCentreString(mac, 80, 30, 2);
+}
+
+
+// put X, Y and Button values in globals JoyX, JoyB, JoyB
+void read_joystick() {
+  Wire.beginTransmission(JOY_ADDR);
+  Wire.write(0x02);
+  Wire.endTransmission();
+  Wire.requestFrom(JOY_ADDR, 3);
+  if (Wire.available()) {
+    JoyX = Wire.read();
+    JoyY = Wire.read();
+    JoyB = Wire.read() > 0 ? false : true;  // Button value is inverted
+  }
 }
 
 
@@ -79,6 +77,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 void setup() {
   M5.begin();
+  Wire.begin(0, 26, 100000);
   M5.Lcd.setRotation(1);
   print_mac_address(TFT_RED);
   esp_now_peer_info_t peerInfo;
@@ -104,36 +103,32 @@ void loop() {
   m5.update();
   if(!connected) {
     command_stop();
+    return;
   }
-  else if(M5.BtnA.wasPressed()) {
-    Serial.println("BtnA pressed");
-    M5.Lcd.setTextColor(TFT_GREEN);
-    switch(mode) {
-      case MODE_FORWARD:
-        command_forward();
-        M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-        M5.Lcd.drawCentreString("Forward", 80, 64, 2);
-        mode = MODE_STOP_AFTER_FORWARD;
-        break;
-      case MODE_STOP_AFTER_FORWARD:
-        M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-        M5.Lcd.drawCentreString("Stop", 80, 64, 2);
-        command_stop();
-        mode = MODE_BACKWARD;
-        break;
-      case MODE_BACKWARD:
-        command_backward();
-        M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-        M5.Lcd.drawCentreString("Backward", 80, 64, 2);
-        mode = MODE_STOP_AFTER_BACKWARD;
-        break;
-      case MODE_STOP_AFTER_BACKWARD:
-        command_stop();
-        M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-        M5.Lcd.drawCentreString("Stop", 80, 64, 2);
-        mode = MODE_FORWARD;
-        break;
-    }
+  read_joystick();
+  if (debug) Serial.printf("X = %3d, Y = %3d, B = %s\t", JoyX, JoyY, JoyB ? " true" : "false");
+  // Joystick values are +/- 128, we need to scale these to +/- 100
+  JoyX = (int8_t)(((int16_t)(JoyX)*100)/128);
+  JoyY = (int8_t)(((int16_t)(JoyY)*100)/128);
+  if (debug) Serial.printf("ScaledX = %3d, ScaledY = %3d\n", JoyX, JoyY);
+  // dampen down the small numbers
+  if (abs(JoyX) < 2) JoyX = 0;
+  if(last != JoyX) {
+    last = JoyX;
+    uint32_t color = TFT_BLACK;
+    if(JoyX > 2) color = 0x001000;
+    else if(JoyX < -2) color = 0x100000;
+
+    datagram.speed_0      = JoyX;
+    datagram.speed_1      = -JoyX;
+    datagram.speed_2      = JoyX;
+    datagram.speed_3      = -JoyX;
+    datagram.color_left   = color;
+    datagram.color_right  = color;
+    esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
+    M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
+    M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
+    M5.Lcd.drawCentreString(String(JoyX), 80, 64, 2);
   }
   delay(100);
 }
