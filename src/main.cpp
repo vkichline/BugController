@@ -9,6 +9,10 @@
 // NEVER check your secrets into a source control manager!
 #include "../../Secrets/M5StickCMacAddresses.h"
 
+// The motors of the BugC are arrainged like:
+//   1      3
+//   0      2
+// ...where left is the front of the BugC
 
 #define JOY_ADDR 0x38
 
@@ -17,11 +21,13 @@ struct_response response;
 uint8_t         bugAddress[]        = M5STICKC_MAC_ADDRESS_BUGC_ROBOT;    // Specific to the BugC M5StickC
 bool            connected           = false;
 control_mode    mode                = MODE_FORWARD;
-int8_t          last                = 127;
+int8_t          lastX               = 127;
+int8_t          lastY               = 127;
 int8_t          JoyX                = 0;
 int8_t          JoyY                = 0;
 bool            JoyB                = false;
 bool            debug               = false;  // Extra serial spew if true
+bool            debug_send          = false;
 
 
 bool command_stop() {
@@ -62,7 +68,7 @@ void read_joystick() {
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.printf("Last Packet Send Status:\t%s\n", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
+  if(debug_send) Serial.printf("Last Packet Send Status:\t%s\n", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
 }
 
 
@@ -105,30 +111,49 @@ void loop() {
     command_stop();
     return;
   }
+
   read_joystick();
   if (debug) Serial.printf("X = %3d, Y = %3d, B = %s\t", JoyX, JoyY, JoyB ? " true" : "false");
+  // If the button was pushed, stop
+  if(JoyB) {
+    command_stop();
+    while(JoyB) {
+      delay(100);
+      read_joystick();
+    }
+    return;
+  }
+
   // Joystick values are +/- 128, we need to scale these to +/- 100
   JoyX = (int8_t)(((int16_t)(JoyX)*100)/128);
   JoyY = (int8_t)(((int16_t)(JoyY)*100)/128);
-  if (debug) Serial.printf("ScaledX = %3d, ScaledY = %3d\n", JoyX, JoyY);
   // dampen down the small numbers
   if (abs(JoyX) < 2) JoyX = 0;
-  if(last != JoyX) {
-    last = JoyX;
+  if (abs(JoyY) < 2) JoyY = 0;
+  float delta = JoyY / 100.0;
+  if(0 > delta) delta = 1.0 + delta;
+  else if(0 < delta) delta = -(1.0 - delta);
+  if (debug) Serial.printf("ScaledX = %3d, ScaledY = %3d, delta = %.3f\n", JoyX, JoyY, delta);
+  if(lastX != JoyX || lastY != JoyY) {
+    lastX = JoyX;
+    lastY = JoyY;
     uint32_t color = TFT_BLACK;
-    if(JoyX > 2) color = 0x001000;
-    else if(JoyX < -2) color = 0x100000;
+    if(JoyX > 2) color = 0x001000;        // Moving forward, set color to green
+    else if(JoyX < -2) color = 0x100000;  // Moving backward, set color to red
 
-    datagram.speed_0      = JoyX;
-    datagram.speed_1      = -JoyX;
-    datagram.speed_2      = JoyX;
-    datagram.speed_3      = -JoyX;
+    // If Y is < 0, trim the speed of motors 1 & 3
+    // If Y is > 0. trim the speed of motors 0 & 2
+    uint8_t scaled_value = (int)((float)JoyX * delta);
+    datagram.speed_0      = 0 > delta ?  JoyX : scaled_value;
+    datagram.speed_1      = 0 < delta ? -JoyX : scaled_value;
+    datagram.speed_2      = 0 > delta ?  JoyX : scaled_value;
+    datagram.speed_3      = 0 < delta ? -JoyX : scaled_value;
     datagram.color_left   = color;
     datagram.color_right  = color;
     esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
     M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
     M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-    M5.Lcd.drawCentreString(String(JoyX), 80, 64, 2);
+    M5.Lcd.drawCentreString(String(JoyX)+"/"+String(JoyY), 80, 64, 2);
   }
   delay(100);
 }
