@@ -1,6 +1,8 @@
 #pragma once
 #include <stdint.h>
 
+#define COMMUNICATIONS_SIGNATURE  0X42554743
+#define COMMUNICATIONS_VERSION    0X0100
 
 enum control_mode {
   MODE_FORWARD,
@@ -18,15 +20,20 @@ enum response_status {
 
 
 typedef struct struct_message {
+  ulong     signature = COMMUNICATIONS_SIGNATURE;
+  uint16_t  version   = COMMUNICATIONS_VERSION;
   int8_t    speed_0;
   int8_t    speed_1;
   int8_t    speed_2;
   int8_t    speed_3;
   uint32_t  color_left;
   uint32_t  color_right;
+  bool      button;
 } struct_message;
 
 
 typedef struct struct_response {
-  response_status  status;
+  ulong           signature = COMMUNICATIONS_SIGNATURE;
+  uint16_t        version   = COMMUNICATIONS_VERSION;
+  response_status status;
 } struct_response;

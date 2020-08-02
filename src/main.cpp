@@ -23,6 +23,7 @@ bool            connected           = false;
 control_mode    mode                = MODE_FORWARD;
 int8_t          lastX               = 127;
 int8_t          lastY               = 127;
+bool            lastB               = false;
 int8_t          JoyX                = 0;
 int8_t          JoyY                = 0;
 bool            JoyB                = false;
@@ -74,9 +75,23 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  if(!connected) {
-    connected = true;
-    print_mac_address(TFT_GREEN);
+  Serial.println("Incoming packet received.");
+  if(sizeof(struct_response) == len) {
+    struct_response* resp = (struct_response*)incomingData;
+    if(COMMUNICATIONS_SIGNATURE == resp->signature && COMMUNICATIONS_VERSION == resp->version) {
+      Serial.println("Incoming packet validated.");
+      if(!connected) {
+        connected = true;
+        print_mac_address(TFT_GREEN);
+      }
+    }
+    else {
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n    Expected version: %d. Actual version: %d\n",
+      COMMUNICATIONS_SIGNATURE, resp->signature, COMMUNICATIONS_VERSION, resp->version);
+    }
+  }
+  else {
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", len, sizeof(struct_response));
   }
 }
 
@@ -111,18 +126,8 @@ void loop() {
     command_stop();
     return;
   }
-
   read_joystick();
   if (debug) Serial.printf("X = %3d, Y = %3d, B = %s\t", JoyX, JoyY, JoyB ? " true" : "false");
-  // If the button was pushed, stop
-  if(JoyB) {
-    command_stop();
-    while(JoyB) {
-      delay(100);
-      read_joystick();
-    }
-    return;
-  }
 
   // Joystick values are +/- 128, we need to scale these to +/- 100
   JoyX = (int8_t)(((int16_t)(JoyX)*100)/128);
@@ -134,9 +139,10 @@ void loop() {
   if(0 > delta) delta = 1.0 + delta;
   else if(0 < delta) delta = -(1.0 - delta);
   if (debug) Serial.printf("ScaledX = %3d, ScaledY = %3d, delta = %.3f\n", JoyX, JoyY, delta);
-  if(lastX != JoyX || lastY != JoyY) {
+  if(lastX != JoyX || lastY != JoyY || lastB != JoyB) {
     lastX = JoyX;
     lastY = JoyY;
+    lastB = JoyB;
     uint32_t color = TFT_BLACK;
     if(JoyX > 2) color = 0x001000;        // Moving forward, set color to green
     else if(JoyX < -2) color = 0x100000;  // Moving backward, set color to red
@@ -150,6 +156,7 @@ void loop() {
     datagram.speed_3      = 0 < delta ? -JoyX : scaled_value;
     datagram.color_left   = color;
     datagram.color_right  = color;
+    datagram.button       = JoyB;
     esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
     M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
     M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
