@@ -28,6 +28,8 @@ Limitations include:
 
 ## Setup
 
+**Note**: If this looks **TL;DR** to you, I'm working on a rev that will enable the devices to discover each other automatically, thanks to @paultech. Please stand by. For those who prefer immediate satisfaction at any cost, please proceed.
+
 * Attach an M5StickC to your BugC when it arrives, turn the BugC switch on and plug the M5StickC in to charge for the night before beginning. It's 750 mAh battery takes a while to charge up, and nothing works until it does.
 * Download both projects and locate their directories side-by side, anywhere you like.
 * Create another directory in the same location named Secrets.
