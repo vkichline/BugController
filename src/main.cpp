@@ -32,8 +32,11 @@
 struct_message      datagram;
 struct_response     response;
 discovery_message   discovery;
-
+esp_now_peer_info_t peerInfo;
+bool                data_ready          = false;
+uint8_t             response_len        = 0;
 uint8_t             broadcastAddress[]  = BROADCAST_MAC_ADDRESS;
+uint8_t             responseAddress[6]  = { 0 };
 uint8_t             bugAddress[6]       = { 0 };
 uint8_t             channel             = 0;
 bool                connected           = false;
@@ -48,7 +51,8 @@ bool                debug_data          = false;          // Extra info about jo
 bool                debug_send          = false;          // Extra info about ESP-Now communications
 
 
-// display the mac address on the screen in a diagnostic color
+// Display the mac address on the screen in a diagnostic color
+//
 void print_mac_address(uint16_t color) {
   M5.Lcd.setTextColor(color);
   M5.Lcd.drawCentreString("BugC Controller", 80, 0, 2);
@@ -58,7 +62,8 @@ void print_mac_address(uint16_t color) {
 }
 
 
-// put X, Y and Button values in globals JoyX, JoyB, JoyB
+// Put X, Y and Button values in globals JoyX, JoyB, JoyB
+//
 void read_joystick() {
   Wire.beginTransmission(JOY_ADDR);
   Wire.write(0x02);
@@ -72,47 +77,22 @@ void read_joystick() {
 }
 
 
-// callback when data is sent
+// Callback when data is sent
+//
 void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   if(debug_send) Serial.printf("Last Packet Send Status:\t%s\n", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
 }
 
 
-// callback function that will be executed when data is received
+// Callback function that will be executed when data is received
+// This is on a high-priority system thread. Do as little as possible.
+//
 void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len) {
   Serial.println("Incoming packet received.");
-  if(sizeof(struct_response) == len) {
-    struct_response* resp = (struct_response*)incomingData;
-    if(COMMUNICATIONS_SIGNATURE == resp->signature && COMMUNICATIONS_VERSION == resp->version) {
-      Serial.println("Incoming packet validated.");
-      if(!connected) {
-        esp_now_peer_info_t peerInfo;
-        Serial.println("Connection packet");
-        connected = true;
-        esp_now_del_peer(broadcastAddress);   // We are finished with discovery
-        memcpy(bugAddress, mac, 6);           // This is who we will be talking to.
-        memcpy(peerInfo.peer_addr, mac, 6);   // Register as a peer
-        peerInfo.channel = channel;
-        peerInfo.encrypt = false;
-        if (ESP_OK == esp_now_add_peer(&peerInfo)) {
-          Serial.println("Added BugC peer");
-        }
-        else {
-          Serial.println("Failed to add BugC peer");
-          return;
-        }
-
-        print_mac_address(TFT_GREEN);
-      }
-    }
-    else {
-    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n    Expected version: %d. Actual version: %d\n",
-      COMMUNICATIONS_SIGNATURE, resp->signature, COMMUNICATIONS_VERSION, resp->version);
-    }
-  }
-  else {
-    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", len, sizeof(struct_response));
-  }
+  memcpy(&response, incomingData, sizeof(struct_response));
+  memcpy(&responseAddress, mac, 6);
+  response_len  = len;
+  data_ready    = true;
 }
 
 
@@ -145,10 +125,43 @@ uint8_t select_comm_channel() {
 }
 
 
+void process_pairing_response() {
+  if(sizeof(struct_response) == response_len) {
+    if(COMMUNICATIONS_SIGNATURE == response.signature && COMMUNICATIONS_VERSION == response.version) {
+      Serial.println("Incoming packet validated.");
+      if(!connected) {
+        Serial.println("Connection packet");
+        connected = true;
+        Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x, channel %d\n", responseAddress[0], responseAddress[1], responseAddress[2], responseAddress[3], responseAddress[4], responseAddress[5], channel);
+        memcpy(bugAddress, responseAddress, 6);         // This is who we will be talking to.
+        memcpy(peerInfo.peer_addr, responseAddress, 6); // Register as a peer
+        peerInfo.channel = channel;
+        peerInfo.encrypt = false;
+        if (ESP_OK == esp_now_add_peer(&peerInfo)) {
+          Serial.println("Added BugC peer");
+        }
+        else {
+          Serial.println("Failed to add BugC peer");
+          return;
+        }
+        esp_now_del_peer(broadcastAddress);             // We are finished with discovery
+        print_mac_address(TFT_GREEN);
+      }
+    }
+    else {
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n    Expected version: %d. Actual version: %d\n",
+      COMMUNICATIONS_SIGNATURE, response.signature, COMMUNICATIONS_VERSION, response.version);
+    }
+  }
+  else {
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", response_len, sizeof(struct_response));
+  }
+}
+
+
 // Broadcast a discovery_message until someone responds with a valid packet
 //
 bool pair_with_obeyer() {
-  esp_now_peer_info_t peerInfo;
   M5.Lcd.fillScreen(BG_COLOR);
   M5.Lcd.drawCentreString("Waiting for Pairing", 80,  8, 2);
   M5.Lcd.drawCentreString("on channel " + String(channel), 80,  32, 2);
@@ -179,10 +192,13 @@ bool pair_with_obeyer() {
     Serial.println("Failed to add Broadcast peer");
   }
 
-  while(true) {
+  while(!connected) {
     esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(discovery_message));
     delay(500);
-    if(connected) break;
+    if(data_ready) {
+      data_ready = false;
+      process_pairing_response();
+    }
   }
   return true;
 }
@@ -196,6 +212,8 @@ void setup() {
   M5.Lcd.fillScreen(BG_COLOR);
   channel = select_comm_channel();
   pair_with_obeyer();
+  M5.Lcd.fillScreen(BLACK);
+  print_mac_address(TFT_GREEN);
 }
 
 
