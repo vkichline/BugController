@@ -25,25 +25,27 @@
 // Go into obeyer mode.
 
 
-#define JOY_ADDR  0x38
-#define BG_COLOR  NAVY
-#define FG_COLOR  LIGHTGREY
+#define JOY_ADDR    0x38
+#define BG_COLOR    NAVY
+#define FG_COLOR    LIGHTGREY
 
-struct_message  datagram;
-struct_response response;
-uint8_t         broadcastAddress[]  = BROADCAST_MAC_ADDRESS;
-uint8_t         bugAddress[6]       = { 0 };
-uint8_t         channel             = 0;
-bool            connected           = false;
-control_mode    mode                = MODE_FORWARD;
-int8_t          lastX               = 127;
-int8_t          lastY               = 127;
-bool            lastB               = false;
-int8_t          JoyX                = 0;
-int8_t          JoyY                = 0;
-bool            JoyB                = false;
-bool            debug_data          = false;                    // Extra info about joystick and speed
-bool            debug_send          = false;                    // Extra info about ESP-Now communications
+struct_message      datagram;
+struct_response     response;
+discovery_message   discovery;
+
+uint8_t             broadcastAddress[]  = BROADCAST_MAC_ADDRESS;
+uint8_t             bugAddress[6]       = { 0 };
+uint8_t             channel             = 0;
+bool                connected           = false;
+control_mode        mode                = MODE_FORWARD;
+int8_t              lastX               = 127;
+int8_t              lastY               = 127;
+bool                lastB               = false;
+int8_t              JoyX                = 0;
+int8_t              JoyY                = 0;
+bool                JoyB                = false;
+bool                debug_data          = false;          // Extra info about joystick and speed
+bool                debug_send          = false;          // Extra info about ESP-Now communications
 
 
 // display the mac address on the screen in a diagnostic color
@@ -71,28 +73,32 @@ void read_joystick() {
 
 
 // callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   if(debug_send) Serial.printf("Last Packet Send Status:\t%s\n", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
 }
 
 
 // callback function that will be executed when data is received
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len) {
   Serial.println("Incoming packet received.");
   if(sizeof(struct_response) == len) {
     struct_response* resp = (struct_response*)incomingData;
     if(COMMUNICATIONS_SIGNATURE == resp->signature && COMMUNICATIONS_VERSION == resp->version) {
       Serial.println("Incoming packet validated.");
       if(!connected) {
-        esp_now_peer_info peerInfo;
+        esp_now_peer_info_t peerInfo;
+        Serial.println("Connection packet");
         connected = true;
         esp_now_del_peer(broadcastAddress);   // We are finished with discovery
         memcpy(bugAddress, mac, 6);           // This is who we will be talking to.
         memcpy(peerInfo.peer_addr, mac, 6);   // Register as a peer
         peerInfo.channel = channel;
         peerInfo.encrypt = false;
-          if (ESP_OK != esp_now_add_peer(&peerInfo)) {
-          Serial.println("Failed to add peer");
+        if (ESP_OK == esp_now_add_peer(&peerInfo)) {
+          Serial.println("Added BugC peer");
+        }
+        else {
+          Serial.println("Failed to add BugC peer");
           return;
         }
 
@@ -141,24 +147,44 @@ uint8_t select_comm_channel() {
 
 // Broadcast a discovery_message until someone responds with a valid packet
 //
-void pair_with_obeyer() {
-  esp_now_peer_info peerInfo;
-  discovery_message msg;
-
+bool pair_with_obeyer() {
+  esp_now_peer_info_t peerInfo;
   M5.Lcd.fillScreen(BG_COLOR);
   M5.Lcd.drawCentreString("Waiting for Pairing", 80,  8, 2);
+  M5.Lcd.drawCentreString("on channel " + String(channel), 80,  32, 2);
+
+  WiFi.mode(WIFI_STA);
+  if(ESP_OK != esp_now_init()) {
+    Serial.println("Error initializing ESP-NOW");
+    return false;
+  }
+  esp_now_register_send_cb(on_data_sent);
+  esp_now_register_recv_cb(on_data_received);
+
+  WiFi.mode(WIFI_STA);
+  if(ESP_OK != esp_now_init()) {
+    Serial.println("Error initializing ESP-NOW");
+    return false;
+  }
+  esp_now_register_send_cb(on_data_sent);
+  esp_now_register_recv_cb(on_data_received);
+
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = channel;
   peerInfo.encrypt = false;
-    if (ESP_OK != esp_now_add_peer(&peerInfo)) {
-    Serial.println("Failed to add peer");
-    return;
+  if (ESP_OK == esp_now_add_peer(&peerInfo)) {
+    Serial.println("Added broadcast peer");
   }
+  else {
+    Serial.println("Failed to add Broadcast peer");
+  }
+
   while(true) {
-    esp_now_send(peerInfo.peer_addr, (uint8_t*)&msg, sizeof(discovery_message));
+    esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(discovery_message));
     delay(500);
     if(connected) break;
   }
+  return true;
 }
 
 
@@ -169,13 +195,6 @@ void setup() {
   M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
   M5.Lcd.fillScreen(BG_COLOR);
   channel = select_comm_channel();
-  WiFi.mode(WIFI_STA);
-  if(ESP_OK != esp_now_init()) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-  esp_now_register_send_cb(OnDataSent);
-  esp_now_register_recv_cb(OnDataRecv);
   pair_with_obeyer();
 }
 
