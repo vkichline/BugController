@@ -28,6 +28,7 @@
 #define JOY_ADDR    0x38
 #define BG_COLOR    NAVY
 #define FG_COLOR    LIGHTGREY
+#define AP_NAME     "BugNowControlAP"
 
 struct_message      datagram;
 struct_response     response;
@@ -58,7 +59,9 @@ void print_mac_address(uint16_t color) {
   M5.Lcd.drawCentreString("BugC Controller", 80, 0, 2);
   String mac = WiFi.macAddress();
   mac.replace(":", " ");
-  M5.Lcd.drawCentreString(mac, 80, 30, 2);
+  String chan = "Channel " + String(channel);
+  M5.Lcd.drawCentreString(mac, 80, 22, 2);
+  if(connected) M5.Lcd.drawCentreString(chan, 80, 44, 2);
 }
 
 
@@ -88,7 +91,7 @@ void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 // This is on a high-priority system thread. Do as little as possible.
 //
 void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  Serial.println("Incoming packet received.");
+  if(debug_send) Serial.println("Incoming packet received.");
   memcpy(&response, incomingData, sizeof(struct_response));
   memcpy(&responseAddress, mac, 6);
   response_len  = len;
@@ -100,10 +103,10 @@ void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len)
 //
 uint8_t select_comm_channel() {
   uint8_t chan  = random(13) + 1;
-  M5.Lcd.drawString("Channel", 8,  8, 1);
-  M5.Lcd.drawString("1 - 14",  8, 26, 1);
-  M5.Lcd.drawString("A = +",   8, 44, 1);
-  M5.Lcd.drawString("B = set", 8, 62, 1);
+  M5.Lcd.drawString("CHAN",    8,  4, 2);
+  M5.Lcd.drawString("1 - 14",  8, 28, 1);
+  M5.Lcd.drawString("A = +",   8, 46, 1);
+  M5.Lcd.drawString("B = Set", 8, 64, 1);
   M5.Lcd.setTextDatum(TR_DATUM);
   M5.Lcd.drawString(String(chan), 160, 2, 8);
 
@@ -125,6 +128,34 @@ uint8_t select_comm_channel() {
 }
 
 
+// Set up ESP-Now. Return true if successful.
+//
+bool initialize_esp_now(uint8_t chan, uint8_t* mac_address) {
+  channel = chan;
+  WiFi.disconnect();
+  bool restart = WiFi.softAP(AP_NAME, "", channel);
+  WiFi.mode(WIFI_STA);
+  if(ESP_OK != esp_now_init()) {
+    Serial.println("Error initializing ESP-NOW");
+    return false;
+  }
+  esp_now_register_send_cb(on_data_sent);
+  esp_now_register_recv_cb(on_data_received);
+
+  memcpy(peerInfo.peer_addr, mac_address, 6);
+  peerInfo.channel = channel;
+  peerInfo.encrypt = false;
+  if (ESP_OK == esp_now_add_peer(&peerInfo)) {
+    Serial.println("Added peer");
+  }
+  else {
+    Serial.println("Failed to add peer");
+    return false;
+  }
+  return true;
+}
+
+
 void process_pairing_response() {
   if(sizeof(struct_response) == response_len) {
     if(COMMUNICATIONS_SIGNATURE == response.signature && COMMUNICATIONS_VERSION == response.version) {
@@ -134,17 +165,15 @@ void process_pairing_response() {
         connected = true;
         Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x, channel %d\n", responseAddress[0], responseAddress[1], responseAddress[2], responseAddress[3], responseAddress[4], responseAddress[5], channel);
         memcpy(bugAddress, responseAddress, 6);         // This is who we will be talking to.
-        memcpy(peerInfo.peer_addr, responseAddress, 6); // Register as a peer
-        peerInfo.channel = channel;
-        peerInfo.encrypt = false;
-        if (ESP_OK == esp_now_add_peer(&peerInfo)) {
-          Serial.println("Added BugC peer");
+
+        if (ESP_OK == esp_now_del_peer(broadcastAddress)) {   // We are finished with discovery
+          Serial.println("Deleted broadcast peer");
         }
         else {
-          Serial.println("Failed to add BugC peer");
-          return;
+          Serial.println("Failed to delete broadcast peer");
         }
-        esp_now_del_peer(broadcastAddress);             // We are finished with discovery
+        // Reinitialize WiFi with the new channel, which must match ESP-Now channel
+        initialize_esp_now(channel, responseAddress);
         print_mac_address(TFT_GREEN);
       }
     }
@@ -166,32 +195,6 @@ bool pair_with_obeyer() {
   M5.Lcd.drawCentreString("Waiting for Pairing", 80,  8, 2);
   M5.Lcd.drawCentreString("on channel " + String(channel), 80,  32, 2);
 
-  WiFi.mode(WIFI_STA);
-  if(ESP_OK != esp_now_init()) {
-    Serial.println("Error initializing ESP-NOW");
-    return false;
-  }
-  esp_now_register_send_cb(on_data_sent);
-  esp_now_register_recv_cb(on_data_received);
-
-  WiFi.mode(WIFI_STA);
-  if(ESP_OK != esp_now_init()) {
-    Serial.println("Error initializing ESP-NOW");
-    return false;
-  }
-  esp_now_register_send_cb(on_data_sent);
-  esp_now_register_recv_cb(on_data_received);
-
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = channel;
-  peerInfo.encrypt = false;
-  if (ESP_OK == esp_now_add_peer(&peerInfo)) {
-    Serial.println("Added broadcast peer");
-  }
-  else {
-    Serial.println("Failed to add Broadcast peer");
-  }
-
   while(!connected) {
     esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(discovery_message));
     delay(500);
@@ -211,6 +214,7 @@ void setup() {
   M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
   M5.Lcd.fillScreen(BG_COLOR);
   channel = select_comm_channel();
+  initialize_esp_now(channel, broadcastAddress);
   pair_with_obeyer();
   M5.Lcd.fillScreen(BLACK);
   print_mac_address(TFT_GREEN);
