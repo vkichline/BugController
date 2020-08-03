@@ -73,8 +73,8 @@ void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len)
 bool initialize_esp_now(uint8_t chan, uint8_t* mac_address) {
   channel = chan;
   WiFi.disconnect();
-  WiFi.softAP(AP_NAME, "", channel);
-  WiFi.mode(WIFI_STA);
+  WiFi.softAP(AP_NAME, "", channel, 1);   // Create a hidden AP on given channel
+  WiFi.mode(WIFI_STA);                    // ...and switch to station mode
   if(ESP_OK != esp_now_init()) {
     Serial.println("Error initializing ESP-NOW");
     return false;
@@ -141,8 +141,8 @@ void process_pairing_response() {
       }
     }
     else {
-    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n    Expected version: %d. Actual version: %d\n",
-      COMMUNICATIONS_SIGNATURE, response.signature, COMMUNICATIONS_VERSION, response.version);
+      Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n", COMMUNICATIONS_SIGNATURE, response.signature);
+      Serial.printf("              Expected version: %d. Actual version: %d\n", COMMUNICATIONS_VERSION, response.version);
     }
   }
   else {
