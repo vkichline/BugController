@@ -2,7 +2,7 @@
 
 The [BugC](https://m5stack.com/collections/m5-hat/products/bugc-w-o-m5stickc) is a simple and inexpensive robot base for the [M5StickC](https://m5stack.com/collections/m5-hat/products/stick-c). Combined with another M5StickC sporting a [Joystick Hat](https://m5stack.com/collections/m5-hat/products/m5stickc-joystick-hat) you have the physical parts of a complete control system.
 
-I had these parts on hand, and was curious about [ESP-Now](https://randomnerdtutorials.com/esp-now-esp32-arduino-ide/), a protocol developed by Espressif Systems to provide direct communications between ESP32 and ESP8266 chips. This seemed like a perfect project for trying out something new.
+I had these parts on hand, and was curious about [ESP-Now](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_now.html#esp-now), a protocol developed by Espressif Systems to provide direct communications between ESP32 and ESP8266 chips. This seemed like a perfect project for trying out something new.
 
 ESP-Now turns out to be an interesting protocol. Advantages include:
 
