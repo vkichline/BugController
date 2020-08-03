@@ -56,12 +56,19 @@ bool                debug_send          = false;          // Extra info about ES
 //
 void print_mac_address(uint16_t color) {
   M5.Lcd.setTextColor(color);
-  M5.Lcd.drawCentreString("BugC Controller", 80, 0, 2);
+  M5.Lcd.drawCentreString("BugNow Controller", 80, 0, 2);
   String mac = WiFi.macAddress();
   mac.replace(":", " ");
-  String chan = "Channel " + String(channel);
+  mac = String("C ") + mac;
   M5.Lcd.drawCentreString(mac, 80, 22, 2);
-  if(connected) M5.Lcd.drawCentreString(chan, 80, 44, 2);
+  if(connected) {
+    char  buffer[32];
+    sprintf(buffer, "R %02X %02X %02X %02X %02X %02X", bugAddress[0], bugAddress[1],
+        bugAddress[2], bugAddress[3], bugAddress[4], bugAddress[5]);
+    M5.Lcd.drawCentreString(buffer, 80, 40, 2);
+    String chan = "Chan " + String(channel);
+    M5.Lcd.drawCentreString(chan, 80, 60, 2);
+  }
 }
 
 
@@ -192,9 +199,8 @@ void process_pairing_response() {
 //
 bool pair_with_obeyer() {
   M5.Lcd.fillScreen(BG_COLOR);
-  M5.Lcd.drawCentreString("Waiting for Pairing", 80,  8, 2);
-  M5.Lcd.drawCentreString("on channel " + String(channel), 80,  32, 2);
-
+  M5.Lcd.drawCentreString("Waiting for Pairing", 80, 20, 2);
+  M5.Lcd.drawCentreString("on channel " + String(channel), 80, 40, 2);
   while(!connected) {
     esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(discovery_message));
     delay(500);
@@ -255,9 +261,9 @@ void loop() {
     datagram.color_right  = color;
     datagram.button       = JoyB;
     esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
-    M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
-    M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-    M5.Lcd.drawCentreString(String(JoyX)+"/"+String(JoyY), 80, 64, 2);
+    // M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
+    // M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
+    // M5.Lcd.drawCentreString(String(JoyX)+"/"+String(JoyY), 80, 64, 2);
   }
   delay(100);
 }
