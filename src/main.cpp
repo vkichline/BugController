@@ -3,22 +3,37 @@
 #include "Wire.h"
 #include "M5StickC.h"
 #include "BugCommunications.h"
-// M5StickCMacAddresses.h includes some defines, including a line like:
-// #define of M5STICKC_MAC_ADDRESS_BUGC_ROBOT   {0xNN, 0xNN, 0xNN, 0xNN, 0xNN, 0xNN}
-// Replace the N's with the digits of your M5StickC's MAC Address (displayed on screen)
-// NEVER check your secrets into a source control manager!
-#include "../../Secrets/M5StickCMacAddresses.h"
 
 // The motors of the BugC are arrainged like:
 //   1      3
 //   0      2
 // ...where left is the front of the BugC
 
-#define JOY_ADDR 0x38
+// Ver 2: Automatic discovery. Secrets file is eliminated.
+// Controller:
+// When turned on, select a channel: 1 - 14. Default is random.
+// Set a special callback function to handle the pairing
+// Add a broadcast peer and broadcast a controller frame until ACK received.
+// Change the callback routine to operational callback
+// Remove broadcast peer.
+// Add the responder as a peer.
+// Go into controller mode.
+// Obeyer:
+// When turned on, select a channel: 1 - 14. Choose the same one as the Controller.
+// Add a broadcast peer and listen for controller frame until detected. Send ACK.
+// Remove broadcast peer.
+// Go into obeyer mode.
+
+
+#define JOY_ADDR  0x38
+#define BG_COLOR  NAVY
+#define FG_COLOR  LIGHTGREY
 
 struct_message  datagram;
 struct_response response;
-uint8_t         bugAddress[]        = M5STICKC_MAC_ADDRESS_BUGC_ROBOT;    // Specific to the BugC M5StickC
+uint8_t         broadcastAddress[]  = BROADCAST_MAC_ADDRESS;
+uint8_t         bugAddress[6]       = { 0 };
+uint8_t         channel             = 0;
 bool            connected           = false;
 control_mode    mode                = MODE_FORWARD;
 int8_t          lastX               = 127;
@@ -27,20 +42,8 @@ bool            lastB               = false;
 int8_t          JoyX                = 0;
 int8_t          JoyY                = 0;
 bool            JoyB                = false;
-bool            debug               = false;  // Extra serial spew if true
-bool            debug_send          = false;
-
-
-bool command_stop() {
-  datagram.speed_0      = 0;
-  datagram.speed_1      = 0;
-  datagram.speed_2      = 0;
-  datagram.speed_3      = 0;
-  datagram.color_left   = BLACK;
-  datagram.color_right  = BLACK;
-  esp_err_t result = esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
-  return (ESP_OK == result);
-}
+bool            debug_data          = false;                    // Extra info about joystick and speed
+bool            debug_send          = false;                    // Extra info about ESP-Now communications
 
 
 // display the mac address on the screen in a diagnostic color
@@ -81,7 +84,18 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     if(COMMUNICATIONS_SIGNATURE == resp->signature && COMMUNICATIONS_VERSION == resp->version) {
       Serial.println("Incoming packet validated.");
       if(!connected) {
+        esp_now_peer_info peerInfo;
         connected = true;
+        esp_now_del_peer(broadcastAddress);   // We are finished with discovery
+        memcpy(bugAddress, mac, 6);           // This is who we will be talking to.
+        memcpy(peerInfo.peer_addr, mac, 6);   // Register as a peer
+        peerInfo.channel = channel;
+        peerInfo.encrypt = false;
+          if (ESP_OK != esp_now_add_peer(&peerInfo)) {
+          Serial.println("Failed to add peer");
+          return;
+        }
+
         print_mac_address(TFT_GREEN);
       }
     }
@@ -96,12 +110,65 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 }
 
 
+// Select and return the channel that we're going to use for communications. This enables racing, etc.
+//
+uint8_t select_comm_channel() {
+  uint8_t chan  = random(13) + 1;
+  M5.Lcd.drawString("Channel", 8,  8, 1);
+  M5.Lcd.drawString("1 - 14",  8, 26, 1);
+  M5.Lcd.drawString("A = +",   8, 44, 1);
+  M5.Lcd.drawString("B = set", 8, 62, 1);
+  M5.Lcd.setTextDatum(TR_DATUM);
+  M5.Lcd.drawString(String(chan), 160, 2, 8);
+
+  // Before transmitting, select a channel
+  while(true) {
+    M5.update();
+    if(M5.BtnB.wasReleased()) break;  // EXIT THE LOOP BY PRESSING B
+    if(M5.BtnA.wasReleased()) {
+      chan++;
+      if(14 < chan) {
+        chan = 1;
+        M5.Lcd.fillRect(60, 2, 100, 80, BG_COLOR);
+      }
+      M5.Lcd.drawString(String(chan), 160, 2, 8);
+    }
+  }
+  M5.Lcd.setTextDatum(TL_DATUM);
+  return chan;
+}
+
+
+// Broadcast a discovery_message until someone responds with a valid packet
+//
+void pair_with_obeyer() {
+  esp_now_peer_info peerInfo;
+  discovery_message msg;
+
+  M5.Lcd.fillScreen(BG_COLOR);
+  M5.Lcd.drawCentreString("Waiting for Pairing", 80,  8, 2);
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = channel;
+  peerInfo.encrypt = false;
+    if (ESP_OK != esp_now_add_peer(&peerInfo)) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+  while(true) {
+    esp_now_send(peerInfo.peer_addr, (uint8_t*)&msg, sizeof(discovery_message));
+    delay(500);
+    if(connected) break;
+  }
+}
+
+
 void setup() {
   M5.begin();
   Wire.begin(0, 26, 100000);
   M5.Lcd.setRotation(1);
-  print_mac_address(TFT_RED);
-  esp_now_peer_info_t peerInfo;
+  M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
+  M5.Lcd.fillScreen(BG_COLOR);
+  channel = select_comm_channel();
   WiFi.mode(WIFI_STA);
   if(ESP_OK != esp_now_init()) {
     Serial.println("Error initializing ESP-NOW");
@@ -109,25 +176,14 @@ void setup() {
   }
   esp_now_register_send_cb(OnDataSent);
   esp_now_register_recv_cb(OnDataRecv);
-
-  memcpy(peerInfo.peer_addr, bugAddress, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-    if (ESP_OK != esp_now_add_peer(&peerInfo)) {
-    Serial.println("Failed to add peer");
-    return;
-  }
+  pair_with_obeyer();
 }
 
 
 void loop() {
   m5.update();
-  if(!connected) {
-    command_stop();
-    return;
-  }
   read_joystick();
-  if (debug) Serial.printf("X = %3d, Y = %3d, B = %s\t", JoyX, JoyY, JoyB ? " true" : "false");
+  if (debug_data) Serial.printf("X = %3d, Y = %3d, B = %s\t", JoyX, JoyY, JoyB ? " true" : "false");
 
   // Joystick values are +/- 128, we need to scale these to +/- 100
   JoyX = (int8_t)(((int16_t)(JoyX)*100)/128);
@@ -138,7 +194,7 @@ void loop() {
   float delta = JoyY / 100.0;
   if(0 > delta) delta = 1.0 + delta;
   else if(0 < delta) delta = -(1.0 - delta);
-  if (debug) Serial.printf("ScaledX = %3d, ScaledY = %3d, delta = %.3f\n", JoyX, JoyY, delta);
+  if (debug_data) Serial.printf("ScaledX = %3d, ScaledY = %3d, delta = %.3f\n", JoyX, JoyY, delta);
   if(lastX != JoyX || lastY != JoyY || lastB != JoyB) {
     lastX = JoyX;
     lastY = JoyY;
