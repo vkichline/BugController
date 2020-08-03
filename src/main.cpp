@@ -1,29 +1,27 @@
+// BugNowController Robot controller with an M5StickC using ESP-Now protocol
+// Pairs with the companion project BugNow
+// By Van Kichline
+// In the year of the plague
+//
+// Ver 2: Automatic discovery. Secrets file is eliminated.
+// Controller:
+// When turned on, select a channel: 1 - 14. Default is random.
+// Add a broadcast peer and broadcast a discovery packet until ACK received.
+// Remove broadcast peer.
+// Add the responder as a peer.
+// Go into controller mode.
+// Receiver:
+// When turned on, select a channel: 1 - 14. Choose the same one as the Controller.
+// Add a broadcast peer and listen for discovery packet until detected. Send ACK.
+// Remove broadcast peer.
+// Go into receiver mode.
+
+
 #include <esp_now.h>
 #include <WiFi.h>
 #include "Wire.h"
 #include "M5StickC.h"
 #include "BugCommunications.h"
-
-// The motors of the BugC are arrainged like:
-//   1      3
-//   0      2
-// ...where left is the front of the BugC
-
-// Ver 2: Automatic discovery. Secrets file is eliminated.
-// Controller:
-// When turned on, select a channel: 1 - 14. Default is random.
-// Set a special callback function to handle the pairing
-// Add a broadcast peer and broadcast a controller frame until ACK received.
-// Change the callback routine to operational callback
-// Remove broadcast peer.
-// Add the responder as a peer.
-// Go into controller mode.
-// Obeyer:
-// When turned on, select a channel: 1 - 14. Choose the same one as the Controller.
-// Add a broadcast peer and listen for controller frame until detected. Send ACK.
-// Remove broadcast peer.
-// Go into obeyer mode.
-
 
 #define JOY_ADDR    0x38
 #define BG_COLOR    NAVY
@@ -41,18 +39,66 @@ uint8_t             responseAddress[6]  = { 0 };
 uint8_t             bugAddress[6]       = { 0 };
 uint8_t             channel             = 0;
 bool                connected           = false;
-control_mode        mode                = MODE_FORWARD;
-int8_t              lastX               = 127;
-int8_t              lastY               = 127;
-bool                lastB               = false;
 int8_t              JoyX                = 0;
 int8_t              JoyY                = 0;
 bool                JoyB                = false;
+int8_t              lastX               = 127;
+int8_t              lastY               = 127;
+bool                lastB               = false;
 bool                debug_data          = false;          // Extra info about joystick and speed
 bool                debug_send          = false;          // Extra info about ESP-Now communications
 
 
-// Display the mac address on the screen in a diagnostic color
+// ESP-Now callback function that will be executed when data is sent
+//
+void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  if(debug_send) Serial.printf("Last Packet Send Status:\t%s\n", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
+}
+
+
+// ESP-Now callback function that will be executed when data is received
+// This is on a high-priority system thread. Do as little as possible.
+//
+void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  if(debug_send) Serial.println("Incoming packet received.");
+  memcpy(&response, incomingData, sizeof(struct_response));
+  memcpy(&responseAddress, mac, 6);
+  response_len  = len;
+  data_ready    = true;
+}
+
+
+// Set up ESP-Now. Return true if successful.
+//
+bool initialize_esp_now(uint8_t chan, uint8_t* mac_address) {
+  channel = chan;
+  WiFi.disconnect();
+  WiFi.softAP(AP_NAME, "", channel);
+  WiFi.mode(WIFI_STA);
+  if(ESP_OK != esp_now_init()) {
+    Serial.println("Error initializing ESP-NOW");
+    return false;
+  }
+  esp_now_register_send_cb(on_data_sent);
+  esp_now_register_recv_cb(on_data_received);
+
+  memcpy(peerInfo.peer_addr, mac_address, 6);
+  peerInfo.channel = channel;
+  peerInfo.encrypt = false;
+  if (ESP_OK == esp_now_add_peer(&peerInfo)) {
+    Serial.println("Added peer");
+  }
+  else {
+    Serial.println("Failed to add peer");
+    return false;
+  }
+  return true;
+}
+
+
+// Display the mac address of the device, and if connected, of its paired device.
+// Also show the channel in use.
+// Red indicates no ESP-Now connection, Green indicates connection established.
 //
 void print_mac_address(uint16_t color) {
   M5.Lcd.setTextColor(color);
@@ -72,37 +118,36 @@ void print_mac_address(uint16_t color) {
 }
 
 
-// Put X, Y and Button values in globals JoyX, JoyB, JoyB
+// When waiting for paring, process incoming response packet. If valid, remove broadcast peer
+// and reinitialize with new peer.
 //
-void read_joystick() {
-  Wire.beginTransmission(JOY_ADDR);
-  Wire.write(0x02);
-  Wire.endTransmission();
-  Wire.requestFrom(JOY_ADDR, 3);
-  if (Wire.available()) {
-    JoyX = Wire.read();
-    JoyY = Wire.read();
-    JoyB = Wire.read() > 0 ? false : true;  // Button value is inverted
+void process_pairing_response() {
+  if(sizeof(struct_response) == response_len) {
+    if(COMMUNICATIONS_SIGNATURE == response.signature && COMMUNICATIONS_VERSION == response.version) {
+      Serial.println("Incoming response packet validated.");
+      if(!connected) {
+        connected = true;
+        memcpy(bugAddress, responseAddress, 6);         // This is who we will be talking to.
+
+        if (ESP_OK == esp_now_del_peer(broadcastAddress)) {   // We are finished with discovery
+          Serial.println("Deleted broadcast peer");
+        }
+        else {
+          Serial.println("Failed to delete broadcast peer");
+        }
+        // Reinitialize WiFi with the new channel, which must match ESP-Now channel
+        initialize_esp_now(channel, responseAddress);
+        print_mac_address(TFT_GREEN);
+      }
+    }
+    else {
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n    Expected version: %d. Actual version: %d\n",
+      COMMUNICATIONS_SIGNATURE, response.signature, COMMUNICATIONS_VERSION, response.version);
+    }
   }
-}
-
-
-// Callback when data is sent
-//
-void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  if(debug_send) Serial.printf("Last Packet Send Status:\t%s\n", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
-}
-
-
-// Callback function that will be executed when data is received
-// This is on a high-priority system thread. Do as little as possible.
-//
-void on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  if(debug_send) Serial.println("Incoming packet received.");
-  memcpy(&response, incomingData, sizeof(struct_response));
-  memcpy(&responseAddress, mac, 6);
-  response_len  = len;
-  data_ready    = true;
+  else {
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", response_len, sizeof(struct_response));
+  }
 }
 
 
@@ -135,62 +180,17 @@ uint8_t select_comm_channel() {
 }
 
 
-// Set up ESP-Now. Return true if successful.
+// Put X, Y and Button values in globals JoyX, JoyB, JoyB
 //
-bool initialize_esp_now(uint8_t chan, uint8_t* mac_address) {
-  channel = chan;
-  WiFi.disconnect();
-  bool restart = WiFi.softAP(AP_NAME, "", channel);
-  WiFi.mode(WIFI_STA);
-  if(ESP_OK != esp_now_init()) {
-    Serial.println("Error initializing ESP-NOW");
-    return false;
-  }
-  esp_now_register_send_cb(on_data_sent);
-  esp_now_register_recv_cb(on_data_received);
-
-  memcpy(peerInfo.peer_addr, mac_address, 6);
-  peerInfo.channel = channel;
-  peerInfo.encrypt = false;
-  if (ESP_OK == esp_now_add_peer(&peerInfo)) {
-    Serial.println("Added peer");
-  }
-  else {
-    Serial.println("Failed to add peer");
-    return false;
-  }
-  return true;
-}
-
-
-void process_pairing_response() {
-  if(sizeof(struct_response) == response_len) {
-    if(COMMUNICATIONS_SIGNATURE == response.signature && COMMUNICATIONS_VERSION == response.version) {
-      Serial.println("Incoming packet validated.");
-      if(!connected) {
-        Serial.println("Connection packet");
-        connected = true;
-        Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x, channel %d\n", responseAddress[0], responseAddress[1], responseAddress[2], responseAddress[3], responseAddress[4], responseAddress[5], channel);
-        memcpy(bugAddress, responseAddress, 6);         // This is who we will be talking to.
-
-        if (ESP_OK == esp_now_del_peer(broadcastAddress)) {   // We are finished with discovery
-          Serial.println("Deleted broadcast peer");
-        }
-        else {
-          Serial.println("Failed to delete broadcast peer");
-        }
-        // Reinitialize WiFi with the new channel, which must match ESP-Now channel
-        initialize_esp_now(channel, responseAddress);
-        print_mac_address(TFT_GREEN);
-      }
-    }
-    else {
-    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected signature: %lu. Actual signature: %lu\n    Expected version: %d. Actual version: %d\n",
-      COMMUNICATIONS_SIGNATURE, response.signature, COMMUNICATIONS_VERSION, response.version);
-    }
-  }
-  else {
-    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", response_len, sizeof(struct_response));
+void read_joystick() {
+  Wire.beginTransmission(JOY_ADDR);
+  Wire.write(0x02);
+  Wire.endTransmission();
+  Wire.requestFrom(JOY_ADDR, 3);
+  if (Wire.available()) {
+    JoyX = Wire.read();
+    JoyY = Wire.read();
+    JoyB = Wire.read() > 0 ? false : true;  // Button value is inverted
   }
 }
 

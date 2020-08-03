@@ -1,9 +1,16 @@
 #pragma once
 #include <stdint.h>
 
+// Note that the motors of the BugC are arrainged like:
+//   1      3
+//   0      2
+// ...where left is the front of the BugC
+
+
 #define COMMUNICATIONS_SIGNATURE  0X42554743
-#define COMMUNICATIONS_VERSION    0X0100
+#define COMMUNICATIONS_VERSION    0X0110
 #define BROADCAST_MAC_ADDRESS     {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
+
 
 enum control_mode {
   MODE_FORWARD,
