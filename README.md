@@ -28,43 +28,25 @@ Limitations include:
 
 ## Setup
 
-**Note**: If this looks **TL;DR** to you, I'm working on a rev that will enable the devices to discover each other automatically, thanks to @paultech. Please stand by. For those who prefer immediate satisfaction at any cost, please proceed.
+This is version 2 of the project and is **much** easier to set up than the original release; no shared secrets are required. It implements a discovery mode which automatically connects the two devices once a channel is selected.
+An upcoming version 3 will include a Simple mode (always uses channel 1 and connects automatically) and a competition mode (which will behave like the current version) which allows multiple pairs to race or fight.  
+Note: If you downloaded the first version of this software and had to create a Secrets directory, throw it away. It's not needed.
 
-* Attach an M5StickC to your BugC when it arrives, turn the BugC switch on and plug the M5StickC in to charge for the night before beginning. It's 750 mAh battery takes a while to charge up, and nothing works until it does.
-* Download both projects and locate their directories side-by side, anywhere you like.
-* Create another directory in the same location named Secrets.
-* Create a file in the Secrets directory named M5StickCMacAddresses.h, and add this to it (you will change this later):
-
-    ```c
-    #define M5STICKC_MAC_ADDRESS_BUGC_ROBOT         {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-    #define M5STICKC_MAC_ADDRESS_BUGC_CONTROLLER    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-    ```
-
-* (Why all this trouble?) Never check secrets into a source control manager, much less upload them to github. A MAC address, like a password, is a secret.
-* Compile the BugC project and upload to the M5StickC which is attached to the BugC.
-* Compile the BugController project and upload to the M5StickC which is attached to the JoyStick.
-* **Your Robot Will Not Work** at this point! Please patiently keep reading.
-* While web connections use URLs to find other devices, ESP-Now relies on the MAC address, a number which is different for every single device on the Internet. When you turn on your programmed M5StickCs they will display their MAC address in red. It's six paris of hexidecimal digits.
-* Return to the Arduino IDE and open Secrets/M5StickCMacAddresses.h
-* Enter the address shown by the BugC device into M5STICKC_MAC_ADDRESS_BUGC_ROBOT, and the address on the Joystick device into M5STICKC_MAC_ADDRESS_BUGC_CONTROLLER. For example:
-    > 4D 53 12 09 AB FF  
-    > ...displayed on the BugC's screen would translate to:
-
-    ```c
-    #define M5STICKC_MAC_ADDRESS_BUGC_ROBOT         {0x4D, 0x53, 0x12, 0x09, 0AB, 0xFF}
-    ```
-
-* Rebuild both programs and upload them again. Be careful to load the right program to the right M5StickC; you can't swap them because the MAC addresses would be reversed.
-* Turn everything off.
+* Attach an M5StickC to your BugC when it arrives, turn the BugC switch on and plug the M5StickC in to charge for the night before beginning. Its 750 mAh battery takes a while to charge up, and nothing works until it does.
+* Compile the BugC project and upload it to the M5Stick attached to the BugC hat.
+* Compile the BugController project and upload it to the M5StickC attached to the Joystick hat.
 * Slide the slide-switch on the back of the BugC base to the right to turn on the BugC.
-* Turn on the M5StickC on the BugC. You will see its name in red, its mac address in red, and its battery voltage (green for OK, red for low.)
-* Turn on the M5StickC with the Joystick. Both displays should turn from red to green as they connect.
+* Turn the two M5StickCs on.
+* You will see a big number between 1 and 14 displayed at random on each device. This is the ESP-Now channel. Click the A button (the big button with M5 written on it) to advance the channel on one Stick or the other until they are both the same.
+* Click the B button (the small button on the side, near the center of the LCD screen) on one device and then the other. As you click the first, the display will show "Waiting for Pairing on channel #". When you click B on the other device, they should pair almost instantly.
+* The devices now display their names, the MAC address of C (the Controller), the MAC address of R (the receiver) and the channel in use. The receiver also displays the motor speed of each motor: green in forward, red in reverse and blue at full stop.
+* You are connected and ready to go.
 
-If the two do not connect (text stays red), plug either back into the computer and use the serial monitor to see what errors are being displayed. Hopefully this will help indicate the cause of the problem.  
-If the BugC turns green and shows different numbers when you move the controller's joystick but there is no movement, make sure you turned on the BugC itself (it has a slide-switch which should be to the right) and that the base is fully charged.
+If the two devices do not connect, plug either back into the computer and use the serial monitor to see what errors are being displayed. Hopefully this will help indicate the cause of the problem.  
+If the BugC connects and shows different speed numbers when you move the controller's joystick but there is no movement, make sure you turned on the BugC itself (it has a slide-switch which should be to the right) and that the base is fully charged.
 
-Once connected, drive your BugC forward by pushing up on the joystick, backwards by pushing down. Left and right are, naturally, left and right.  
+Drive your BugC forward by pushing up on the joystick, backwards by pushing down. Left and right are, naturally, left and right.  
 If you click the joystick, the red LED in the BugC's M5StickC will turn on as long as the joystick is pressed.  
-If your controller M5StickC runs out of power while the BugC is running, pressing the A button (the big one with "M5" on it) on the BugC will stop the motors and turn off the lights.  
+If your BugController runs out of power while the BugC is running, pressing the A button (the big one with "M5" on it) on the BugC will stop the motors and turn off the lights.  
 
 It's not a very accurate or powerful robot, but it's fun to play with. My cat does not fear it, but avoids its touch.
