@@ -28,22 +28,30 @@ Limitations include:
 
 ## Setup
 
-This is version 2 of the project and is **much** easier to set up than the original release; no shared secrets are required. It implements a discovery mode which automatically connects the two devices once a channel is selected.
-An upcoming version 3 will include a Simple mode (always uses channel 1 and connects automatically) and a competition mode (which will behave like the current version) which allows multiple pairs to race or fight.  
-Note: If you downloaded the first version of this software and had to create a Secrets directory, throw it away. It's not needed.
+There are two modes of operation: Simple and Competition. The Simple mode makes pairing as simple as possible. Competition mode allows you to select one of 14 channels to operate on.
 
-* Attach an M5StickC to your BugC when it arrives, turn the BugC switch on and plug the M5StickC in to charge for the night before beginning. Its 750 mAh battery takes a while to charge up, and nothing works until it does.
+* Attach an M5StickC to your BugC when it arrives in the mail, turn the BugC switch on and plug the M5StickC in to charge over night before beginning. Its 750 mAh battery takes a while to charge up, and nothing works until it does.
 * Compile the BugC project and upload it to the M5Stick attached to the BugC hat.
 * Compile the BugController project and upload it to the M5StickC attached to the Joystick hat.
 * Slide the slide-switch on the back of the BugC base to the right to turn on the BugC.
-* Turn the two M5StickCs on.
-* You will see a big number between 1 and 14 displayed at random on each device. This is the ESP-Now channel. Click the A button (the big button with M5 written on it) to advance the channel on one Stick or the other until they are both the same.
-* Click the B button (the small button on the side, near the center of the LCD screen) on one device and then the other. As you click the first, the display will show "Waiting for Pairing on channel #". When you click B on the other device, they should pair almost instantly.
-* The devices now display their names, the MAC address of C (the Controller), the MAC address of R (the receiver) and the channel in use. The receiver also displays the motor speed of each motor: green in forward, red in reverse and blue at full stop.
-* You are connected and ready to go.
 
-If the two devices do not connect, plug either back into the computer and use the serial monitor to see what errors are being displayed. Hopefully this will help indicate the cause of the problem.  
-If the BugC connects and shows different speed numbers when you move the controller's joystick but there is no movement, make sure you turned on the BugC itself (it has a slide-switch which should be to the right) and that the base is fully charged.
+### Simple Mode
+
+* Turn one of the devices on. It will display the device name, a letter describing its function (C for Controller and R for Receiver), the device's MAC address (six pairs of hexidecimal digits) and the channel in use (channel 1 for simple mode) all in red, indicating that the device is not yet paired.
+* Turn on the other device. It will look similar to the first for a moment, then both should turn green and display two MAC addresses. This indicates that pairing is complete.
+* The devices now display their names, the MAC address of C (the Controller), the MAC address of R (the receiver) and the channel in use. The Receiver also displays the motor speed of each motor: in green for forward, red for reverse and blue for full stop.
+* You are paired and ready to go.
+
+### Competition Mode
+
+* Turn each M5StickCs on **while holding down the A button** (the big button with M5 written on it.)
+* You will see a big number between 1 and 14 displayed at random on each device. This is the ESP-Now channel. Click the A button to advance the channel on one Stick or the other until they are both the same.
+* Click the B button (the small button on the side, near the center of the LCD screen) on one device and then the other. As you click the first, the display will show "Waiting for Pairing on channel #". When you click B on the other device, they should pair almost instantly.
+* The devices now display their names, the MAC address of C (the Controller), the MAC address of R (the receiver) and the channel in use. The Receiver also displays the motor speed of each motor: in green for forward, red for reverse and blue for full stop.
+* You are paired and ready to go.
+
+If the two devices do not pair, plug either back into the computer and use the serial monitor to see what errors are being displayed. Hopefully this will help indicate the cause of the problem.  
+If the BugC pairs and shows different speed numbers when you move the Controller's joystick but there is no movement, make sure you turned on the BugC itself (it has a slide-switch which should be to the right) and that the base is fully charged.
 
 Drive your BugC forward by pushing up on the joystick, backwards by pushing down. Left and right are, naturally, left and right.  
 If you click the joystick, the red LED in the BugC's M5StickC will turn on as long as the joystick is pressed.  
