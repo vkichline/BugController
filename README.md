@@ -23,7 +23,7 @@ Limitations include:
 * (2) M5StickCs: [ESP32-PICO Mini IoT Development Kits](https://m5stack.com/collections/m5-hat/products/stick-c)
 * (1) BugC: [BugC Programmable Robot Base](https://m5stack.com/collections/m5-hat/products/bugc-w-o-m5stickc)
 * (1) Joystick: [Joystick Hat](https://m5stack.com/collections/m5-hat/products/m5stickc-joystick-hat)
-* (2) Projects: BugC and BugController
+* (2) Projects: [BugC](https://github.com/vkichline/BugC) and [BugController](https://github.com/vkichline/BugController)
 * Approximate cost if you live where I do and order directly from M5Stack in China, about $33.80.
 
 ## Setup
