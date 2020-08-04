@@ -27,10 +27,10 @@ enum response_status {
 };
 
 
-typedef struct discovery_message {
+typedef struct struct_discovery {
   ulong     signature = COMMUNICATIONS_SIGNATURE;
   uint16_t  version   = COMMUNICATIONS_VERSION;
-} discovery_message;
+} struct_discovery;
 
 
 typedef struct struct_message {

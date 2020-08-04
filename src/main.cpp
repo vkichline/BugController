@@ -30,8 +30,9 @@
 
 struct_message      datagram;
 struct_response     response;
-discovery_message   discovery;
+struct_discovery   discovery;
 esp_now_peer_info_t peerInfo;
+bool                comp_mode           = false;          // Competition mode: manually select a channel
 bool                data_ready          = false;
 uint8_t             response_len        = 0;
 uint8_t             broadcastAddress[]  = BROADCAST_MAC_ADDRESS;
@@ -107,13 +108,13 @@ void print_mac_address(uint16_t color) {
   mac.replace(":", " ");
   mac = String("C ") + mac;
   M5.Lcd.drawCentreString(mac, 80, 22, 2);
+  String chan = "Chan " + String(channel);
+  M5.Lcd.drawCentreString(chan, 80, 60, 2);
   if(connected) {
     char  buffer[32];
     sprintf(buffer, "R %02X %02X %02X %02X %02X %02X", bugAddress[0], bugAddress[1],
         bugAddress[2], bugAddress[3], bugAddress[4], bugAddress[5]);
     M5.Lcd.drawCentreString(buffer, 80, 40, 2);
-    String chan = "Chan " + String(channel);
-    M5.Lcd.drawCentreString(chan, 80, 60, 2);
   }
 }
 
@@ -122,7 +123,7 @@ void print_mac_address(uint16_t color) {
 // and reinitialize with new peer.
 //
 void process_pairing_response() {
-  if(sizeof(struct_response) == response_len) {
+  if(response_len == comp_mode ? sizeof(struct_response) : sizeof(struct_discovery)) {
     if(COMMUNICATIONS_SIGNATURE == response.signature && COMMUNICATIONS_VERSION == response.version) {
       Serial.println("Incoming response packet validated.");
       if(!connected) {
@@ -146,14 +147,17 @@ void process_pairing_response() {
     }
   }
   else {
-    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", response_len, sizeof(struct_response));
+    Serial.printf("COMM FAILURE: Incoming packet rejected. Expected size: %d. Actual size: %d\n", sizeof(struct_response), response_len);
   }
 }
 
 
-// Select and return the channel that we're going to use for communications. This enables racing, etc.
+// If we're not in competition mode, simply return 1.
+// Else, select and return the channel that we're going to use for communications. This enables racing, etc.
 //
 uint8_t select_comm_channel() {
+  if(!comp_mode) return 1;
+
   uint8_t chan  = random(13) + 1;
   M5.Lcd.drawString("CHAN",    8,  4, 2);
   M5.Lcd.drawString("1 - 14",  8, 28, 1);
@@ -195,14 +199,20 @@ void read_joystick() {
 }
 
 
-// Broadcast a discovery_message until someone responds with a valid packet
+// Broadcast a struct_discovery until someone responds with a valid packet
 //
-bool pair_with_obeyer() {
-  M5.Lcd.fillScreen(BG_COLOR);
-  M5.Lcd.drawCentreString("Waiting for Pairing", 80, 20, 2);
-  M5.Lcd.drawCentreString("on channel " + String(channel), 80, 40, 2);
+bool pair_with_receiver() {
+  if(comp_mode) {
+    M5.Lcd.fillScreen(BG_COLOR);
+    M5.Lcd.drawCentreString("Waiting for Pairing", 80, 20, 2);
+    M5.Lcd.drawCentreString("on channel " + String(channel), 80, 40, 2);
+  }
+  else {
+    M5.Lcd.fillScreen(TFT_BLACK);
+    print_mac_address(TFT_RED);
+  }
   while(!connected) {
-    esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(discovery_message));
+    esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(struct_discovery));
     delay(500);
     if(data_ready) {
       data_ready = false;
@@ -213,22 +223,7 @@ bool pair_with_obeyer() {
 }
 
 
-void setup() {
-  M5.begin();
-  Wire.begin(0, 26, 100000);
-  M5.Lcd.setRotation(1);
-  M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
-  M5.Lcd.fillScreen(BG_COLOR);
-  channel = select_comm_channel();
-  initialize_esp_now(channel, broadcastAddress);
-  pair_with_obeyer();
-  M5.Lcd.fillScreen(BLACK);
-  print_mac_address(TFT_GREEN);
-}
-
-
-void loop() {
-  m5.update();
+void process_joystick() {
   read_joystick();
   if (debug_data) Serial.printf("X = %3d, Y = %3d, B = %s\t", JoyX, JoyY, JoyB ? " true" : "false");
 
@@ -261,9 +256,38 @@ void loop() {
     datagram.color_right  = color;
     datagram.button       = JoyB;
     esp_now_send(bugAddress, (uint8_t*)&datagram, sizeof(struct_message));
-    // M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
-    // M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
-    // M5.Lcd.drawCentreString(String(JoyX)+"/"+String(JoyY), 80, 64, 2);
   }
+}
+
+
+void display_battery_voltage() {
+  M5.Lcd.setTextColor((0 <= JoyX) ? TFT_GREEN : TFT_RED);
+  M5.Lcd.fillRect(40, 64, 80, 16, TFT_BLACK);
+  M5.Lcd.drawCentreString(String(JoyX)+"/"+String(JoyY), 80, 64, 2);
+}
+
+
+void setup() {
+  if(digitalRead(BUTTON_A_PIN) == 0) {
+    comp_mode = true;
+  }
+  M5.begin();
+  Wire.begin(0, 26, 100000);
+  M5.Lcd.setRotation(1);
+  M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
+  M5.Lcd.fillScreen(BG_COLOR);
+
+  channel = select_comm_channel();
+  initialize_esp_now(channel, broadcastAddress);
+  pair_with_receiver();
+  M5.Lcd.fillScreen(BLACK);
+  print_mac_address(TFT_GREEN);
+}
+
+
+void loop() {
+  m5.update();
+  process_joystick();
+  // display_battery_voltage();
   delay(100);
 }
