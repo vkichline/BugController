@@ -26,6 +26,8 @@ Limitations include:
 * (2) Projects: [BugC](https://github.com/vkichline/BugC) and [BugController](https://github.com/vkichline/BugController)
 * Approximate cost if you live where I do and order directly from M5Stack in China, about $33.80.
 
+    ![BugNow Pair](./images/BugNow.png)
+
 ## Setup
 
 There are two modes of operation: Simple and Competition. The Simple mode makes pairing as simple as possible. Competition mode allows you to select one of 14 channels to operate on.
@@ -38,16 +40,34 @@ There are two modes of operation: Simple and Competition. The Simple mode makes 
 ### Simple Mode
 
 * Turn one of the devices on. It will display the device name, a letter describing its function (C for Controller and R for Receiver), the device's MAC address (six pairs of hexidecimal digits) and the channel in use (channel 1 for simple mode) all in red, indicating that the device is not yet paired.
+
+    ![Simple Pairing](./images/SimplePairing.png)
+
 * Turn on the other device. It will look similar to the first for a moment, then both should turn green and display two MAC addresses. This indicates that pairing is complete.
+
+    ![Simple Paired](./images/SimplePaired.png)
+
 * The devices now display their names, the MAC address of C (the Controller), the MAC address of R (the receiver) and the channel in use. The Receiver also displays the motor speed of each motor: in green for forward, red for reverse and blue for full stop.
 * You are paired and ready to go.
 
 ### Competition Mode
 
 * Turn each M5StickCs on **while holding down the A button** (the big button with M5 written on it.)
+
+    ![Competition Mode](./images/CompMode.png)
+
 * You will see a big number between 1 and 14 displayed at random on each device. This is the ESP-Now channel. Click the A button to advance the channel on one Stick or the other until they are both the same.
+
+    ![Same Channel](./images/SameChannel.png)
+
 * Click the B button (the small button on the side, near the center of the LCD screen) on one device and then the other. As you click the first, the display will show "Waiting for Pairing on channel #". When you click B on the other device, they should pair almost instantly.
+
+    ![Competition Paired](./images/OneWaiting.png)
+
 * The devices now display their names, the MAC address of C (the Controller), the MAC address of R (the receiver) and the channel in use. The Receiver also displays the motor speed of each motor: in green for forward, red for reverse and blue for full stop.
+
+    ![Competition Paired](./images/CompPaired.png)
+
 * You are paired and ready to go.
 
 If the two devices do not pair, plug either back into the computer and use the serial monitor to see what errors are being displayed. Hopefully this will help indicate the cause of the problem.  
