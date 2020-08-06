@@ -52,7 +52,7 @@ void print_mac_address(uint16_t color) {
   if(bug_comm.is_connected()) {
     char  buffer[32];
     uint8_t*  pa = bug_comm.get_peer_address();
-    sprintf(buffer, "C %02X %02X %02X %02X %02X %02X", pa[0], pa[1], pa[2], pa[3], pa[4], pa[5]);
+    sprintf(buffer, "R %02X %02X %02X %02X %02X %02X", pa[0], pa[1], pa[2], pa[3], pa[4], pa[5]);
     M5.Lcd.drawCentreString(buffer, 80, 40, 2);
   }
 }
@@ -120,9 +120,9 @@ bool pair_with_receiver() {
   while(!bug_comm.is_connected()) {
     bug_comm.send_discovery();
     delay(500);
-    if(bug_comm.get_data_ready()) {
-      bug_comm.clear_data_ready();
-      bug_comm.process_pairing_response(comp_mode);
+    if(bug_comm.is_data_ready() && KIND_DISCOVERY == bug_comm.get_msg_kind()) {
+      Serial.println("Discovery response received.");
+      bug_comm.process_discovery_response();
       print_mac_address(TFT_GREEN);
     }
   }
@@ -153,6 +153,7 @@ void setup() {
   M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
   M5.Lcd.fillScreen(BG_COLOR);
 
+  bug_comm.begin(MODE_CONTROLLER);
   bug_comm.initialize_esp_now(select_comm_channel());
   pair_with_receiver();
   M5.Lcd.fillScreen(BLACK);
