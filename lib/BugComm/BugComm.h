@@ -8,7 +8,7 @@
 // ...where left is the front of the BugC
 
 #define BUGCOMM_SIGNATURE       0X42554743
-#define BUGCOMM_VERSION         0X0110
+#define BUGCOMM_VERSION         0X0200
 #define BROADCAST_MAC_ADDRESS   {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
 #define AP_NAME                 "BugNowAP"
 
