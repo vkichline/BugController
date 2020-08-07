@@ -4,8 +4,8 @@
 
 void BugComm::send_command(int8_t x, int8_t y, bool button) {
   // Joystick values are +/- 128, we need to scale these to +/- 100
-  x = (int8_t)(((int16_t)(x)*100)/128);
-  y = (int8_t)(((int16_t)(y)*100)/128);
+  x =  (int8_t)(((int16_t)(x)*100)/128);
+  y = -(int8_t)(((int16_t)(y)*100)/128);  // Invert Y so steering is natural
   // dampen down the small numbers
   if (abs(x) < 2) x = 0;
   if (abs(y) < 2) y = 0;
