@@ -23,13 +23,12 @@
 #include <M5StickC.h>
 #include <BugComm.h>
 
-
 #define JOY_ADDR    0x38
 #define BG_COLOR    NAVY
 #define FG_COLOR    LIGHTGREY
 
 
-BugComm             bug_comm;
+BugComm             bug_comm;                             // From NowComm template class
 bool                comp_mode           = false;          // Competition mode: manually select a channel
 int8_t              JoyX                = 0;
 int8_t              JoyY                = 0;
@@ -120,7 +119,7 @@ bool pair_with_receiver() {
   while(!bug_comm.is_connected()) {
     bug_comm.send_discovery();
     delay(500);
-    if(bug_comm.is_data_ready() && KIND_DISCOVERY == bug_comm.get_msg_kind()) {
+    if(bug_comm.is_data_ready() && NOWCOMM_KIND_DISCOVERY == bug_comm.get_msg_kind()) {
       Serial.println("Discovery response received.");
       bug_comm.process_discovery_response();
       print_mac_address(TFT_GREEN);
@@ -153,8 +152,7 @@ void setup() {
   M5.Lcd.setTextColor(FG_COLOR, BG_COLOR);
   M5.Lcd.fillScreen(BG_COLOR);
 
-  bug_comm.begin(MODE_CONTROLLER);
-  bug_comm.initialize_esp_now(select_comm_channel());
+  bug_comm.begin(NOWCOMM_MODE_CONTROLLER, select_comm_channel());
   pair_with_receiver();
   M5.Lcd.fillScreen(BLACK);
   print_mac_address(TFT_GREEN);
