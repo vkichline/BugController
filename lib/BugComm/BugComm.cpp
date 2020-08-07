@@ -16,9 +16,9 @@ void BugComm::send_command(int8_t x, int8_t y, bool button) {
     last_x = x;
     last_y = y;
     last_b = button;
-    uint32_t color = 0x0000;            // Black
-    if(x > 2) color = 0x001000;         // Moving forward, set color to green
-    else if(y < -2) color = 0x100000;   // Moving backward, set color to red
+    uint32_t color = 0x0000;          // Black
+    if     (x > 0) color = 0x001000;  // Moving forward, set color to green
+    else if(x < 0) color = 0x100000;  // Moving backward, set color to red
 
     // If Y is < 0, trim the speed of motors 1 & 3
     // If Y is > 0. trim the speed of motors 0 & 2
