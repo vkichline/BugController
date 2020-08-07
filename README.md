@@ -17,6 +17,12 @@ Limitations include:
 * Non-routable protocol (for local use only, not for remote connections)
 * 250 byte maximum payload - fine for light telemetry, not for general communications
 
+## What's New
+
+The original post of this code was poorly organized, but it's evolved. Since then I've broken the communications out to a library that contains of a class template called NowComm.h, implementing all the communications pairing and transactions but leaving the structure of the command as a template argument. This is intended to make implementing ESP-Now remote-control interfaces as simple as possible.  
+Built on top of this is BugComm, a simple example of an extension of NowComm specialized for sending commands to the BugC.  
+I hope to develop NowComm into a generally available library, but it's still pretty green. I'm sure there are still issues I haven't considered and I haven't even touched encryption yet. But I'd love to hear if anybody uses NowComm for their own project, and what suggestions they have for improvement.
+
 ## Prerequisites
 
 * PlatformIO rather than the Arduino IDE. You can easily modify these projects to work on Arduino if you don't use PlatformIO; just change main.c to [ProjectName].ino and move everything to one folder per project.
