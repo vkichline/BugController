@@ -121,8 +121,9 @@ bool pair_with_receiver() {
     delay(500);
     if(bug_comm.is_data_ready() && NOWCOMM_KIND_DISCOVERY == bug_comm.get_msg_kind()) {
       Serial.println("Discovery response received.");
-      bug_comm.process_discovery_response();
-      print_mac_address(TFT_GREEN);
+      if(bug_comm.process_discovery_response()) {
+        print_mac_address(TFT_GREEN);
+      }
     }
   }
   return true;

@@ -35,7 +35,7 @@ enum NowComm_Mode {
 
 
 typedef struct NowComm_Response {
-  ulong           signature = NOWCOMM_SIGNATURE;
+  uint32_t        signature = NOWCOMM_SIGNATURE;
   uint16_t        version   = NOWCOMM_VERSION;
   NowComm_Kind    kind      = NOWCOMM_KIND_RESPONSE;
   NowComm_Status  status;
@@ -61,7 +61,7 @@ class NowComm {
   public:
     void                 begin(NowComm_Mode mode, uint8_t chan);   // Mode of this unit, not the peer.  Channel = 1 - 14
     void                 send_discovery();
-    void                 process_discovery_response();
+    bool                 process_discovery_response();
     void                 send_command(T* command);
     void                 send_response(NowComm_Status status);
     bool                 is_connected()      { return connected;   }
@@ -149,6 +149,10 @@ template <typename T> void NowComm<T>::send_discovery() {
   discovery.mode = device_mode;
   Serial.printf("Sending discovery message: %s\n", NOWCOMM_MODE_CONTROLLER == device_mode ? "NOWCOMM_MODE_CONTROLLER" : "NOWCOMM_MODE_RECEIVER");
   esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(NowComm_Discovery));
+#ifdef DEBUG_DUMP_PACKET
+  for(int i = 0; i < 6; i++) { Serial.printf("%02X", peerAddress[i]); } Serial.print(" DIS ");
+  for(int i = 0; i < sizeof(NowComm_Response); i++) { Serial.printf("%02X ", ((char*)&response)[i]); } Serial.println();
+#endif
 }
 
 
@@ -163,7 +167,7 @@ template <typename T> void NowComm<T>::send_response(NowComm_Status status) {
   esp_now_send(peerAddress, (uint8_t *) &response, sizeof(NowComm_Response));
 #endif
 #ifdef DEBUG_DUMP_PACKET
-  for(int i = 0; i < 6; i++) { Serial.printf("%02X", peerAddress[i]); } Serial.print(" Out ");
+  for(int i = 0; i < 6; i++) { Serial.printf("%02X", peerAddress[i]); } Serial.print(" RSP ");
   for(int i = 0; i < sizeof(NowComm_Response); i++) { Serial.printf("%02X ", ((char*)&response)[i]); } Serial.println();
 #endif
 }
@@ -173,7 +177,7 @@ template <typename T> void NowComm<T>::send_response(NowComm_Status status) {
 //
 template <typename T> void NowComm<T>::send_command(T* data) {
 #ifdef DEBUG_DUMP_PACKET
-  for(int i = 0; i < 6; i++) { Serial.printf("%02X", peerAddress[i]); } Serial.print(" Out ");
+  for(int i = 0; i < 6; i++) { Serial.printf("%02X", peerAddress[i]); } Serial.print(" CMD ");
   for(int i = 0; i < sizeof(T); i++) { Serial.printf("%02X ", ((char*)data)[i]); } Serial.println();
 #endif
   esp_now_send(peerAddress, (uint8_t*)data, sizeof(T));
@@ -182,11 +186,12 @@ template <typename T> void NowComm<T>::send_command(T* data) {
 
 // When waiting for paring, process incoming discovery packet. If valid, remove broadcast peer
 // and reinitialize with new peer. Mode is the mode of this station, not the peer.
+// Return true if a connection was made, else false.
 //
-template <typename T> void NowComm<T>::process_discovery_response() {
+template <typename T> bool NowComm<T>::process_discovery_response() {
   if(NOWCOMM_MODE_UNINITIALIZED == device_mode) {
     Serial.println("ERROR: Call begin(mode), channel");
-    return;
+    return false;
   }
   if(data_ready) {
     Serial.printf("Processing discovery response. msg_kind = %d, msg_len = %d, mode = %d\n", msg_kind, response_len, discovery.mode);
@@ -205,16 +210,16 @@ template <typename T> void NowComm<T>::process_discovery_response() {
       }
       else {
         Serial.println("Failed to delete broadcast peer");
-        return;
+        return false;
       }
       // Reinitialize WiFi with the new channel, which must match ESP-Now channel
       initialize_esp_now(channel, responseAddress);
-      return;
+      return true;
     }
     else {
       Serial.print("COMM FAILURE: Incoming packet rejected. ");
       if(sizeof(NowComm_Discovery) != response_len) Serial.printf("Expected size: %d. Actual size: %d\n", sizeof(NowComm_Discovery), response_len);
-      else if(NOWCOMM_SIGNATURE != response.signature) Serial.printf("Expected signature: %lu. Actual signature: %lu\n", NOWCOMM_SIGNATURE, response.signature);
+      else if(NOWCOMM_SIGNATURE != response.signature) Serial.printf("Expected signature: %d. Actual signature: %d\n", NOWCOMM_SIGNATURE, response.signature);
       else if(NOWCOMM_VERSION   != response.version)   Serial.printf("Expected version: %d. Actual version: %d\n", NOWCOMM_VERSION, response.version);
       else if(discovery.mode    != (device_mode == NOWCOMM_MODE_CONTROLLER) ? NOWCOMM_MODE_RECEIVER : NOWCOMM_MODE_CONTROLLER) Serial.printf("Expected kind: %s. Actual kind: %s\n",
                                    (device_mode == NOWCOMM_MODE_CONTROLLER) ? "NOWCOMM_MODE_RECEIVER" : "NOWCOMM_MODE_CONTROLLER",
@@ -222,6 +227,7 @@ template <typename T> void NowComm<T>::process_discovery_response() {
       else Serial.println("Coding error.\n");
     }
   }
+  return false;
 }
 
 
@@ -242,7 +248,7 @@ template <typename T> void NowComm<T>::on_data_sent(const uint8_t *mac_addr, esp
 //
 template <typename T> void NowComm<T>::on_data_received(const uint8_t * mac, const uint8_t *incomingData, int len) {
 #ifdef DEBUG_DUMP_PACKET
-  for(int i = 0; i < 6; i++) { Serial.printf("%02X", mac[i]); } Serial.print(" In  ");
+  for(int i = 0; i < 6; i++) { Serial.printf("%02X", mac[i]); } Serial.print(" REC ");
   for(int i = 0; i < len; i++) { Serial.printf("%02X ", incomingData[i]); } Serial.println();
 #endif
   if(sizeof(T) == len && NOWCOMM_KIND_COMMAND == ((uint32_t*)incomingData)[2]) {
