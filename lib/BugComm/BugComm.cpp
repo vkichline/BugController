@@ -23,10 +23,10 @@ void BugComm::send_command(int8_t x, int8_t y, bool button) {
     // If Y is < 0, trim the speed of motors 1 & 3
     // If Y is > 0. trim the speed of motors 0 & 2
     uint8_t scaled_value = (int)((float)x * delta);
-    command.speed_0      = 0 > delta ?  x : scaled_value;
-    command.speed_1      = 0 < delta ? -x : scaled_value;
-    command.speed_2      = 0 > delta ?  x : scaled_value;
-    command.speed_3      = 0 < delta ? -x : scaled_value;
+    command.speed_0      = 0 >= delta ?  x : scaled_value;
+    command.speed_1      = 0 <= delta ? -x : scaled_value;
+    command.speed_2      = 0 >= delta ?  x : scaled_value;
+    command.speed_3      = 0 <= delta ? -x : scaled_value;
     command.color_left   = color;
     command.color_right  = color;
     command.button       = button;
